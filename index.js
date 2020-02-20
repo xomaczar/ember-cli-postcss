@@ -9,30 +9,45 @@ const mergeTrees = require('broccoli-merge-trees')
 const postcssFilter = require('broccoli-postcss')
 const PostcssCompiler = require('broccoli-postcss-single')
 
-function PostcssPlugin (addon) {
+function PostcssPlugin (addon, options) {
   this.name = 'ember-cli-postcss'
   this.addon = addon
+  this.options = options
   this.ext = ['css', 'less', 'styl', 'scss', 'sass']
 }
 
 PostcssPlugin.prototype.toTree = function (tree, inputPath, outputPath, inputOptions) {
-  let inputTrees = [tree]
-  const defaultOptions = { enabled: true }
+  const { includePaths, onlyIncluded } = this.addon._options && this.addon._options.compile
+  const defaultOptions = { enabled: true, includePaths, onlyIncluded }
   const options = merge.recursive(defaultOptions, this.addon._options.compile, inputOptions)
-
   if (!options.enabled) {
     return tree
   }
 
+  let inputTrees = [tree]
+
+  // Include onl
+  if (options.onlyIncluded) {
+    const funnel = require('broccoli-funnel')
+
+    inputTrees = [funnel(tree, {
+      include: ['app/styles/**/*'],
+      annotation: 'Funnel (styles)'
+    })]
+  }
+
+  // an array of include paths (each one must be a directory)
+  // Input trees are used by broccoli-caching-writer in PostcssCompiler
+  // to add a caching layer based on the hash of the input directory trees
+  // Include path must be a directory
   if (options.includePaths) {
-    inputTrees = inputTrees.concat(options.includePaths)
+    inputTrees = [...inputTrees, ...options.includePaths]
   }
 
   const ext = options.extension || 'css'
-  const paths = options.outputPaths
-  const trees = Object.keys(paths).map((file) => {
+  const trees = Object.keys(options.outputPaths).map((file) => {
     const input = path.join(inputPath, `${file}.${ext}`)
-    const output = paths[file]
+    const output = options.outputPaths[file]
     return new PostcssCompiler(inputTrees, input, output, options)
   })
 
